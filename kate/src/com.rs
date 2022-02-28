@@ -262,7 +262,7 @@ pub fn extend_data_matrix(
 		.chunks_exact_mut(extended_rows_num)
 		.for_each(|col| {
 			let half_len = col.len() / 2;
-			column_eval_domain.ifft_slice(&mut col[0..half_len]);
+			// column_eval_domain.ifft_slice(&mut col[0..half_len]);
 			extended_column_eval_domain.fft_slice(col);
 		});
 
@@ -682,6 +682,16 @@ mod tests {
 			.collect::<Vec<_>>()
 	}
 
+	fn truncate_flatten_matrix2(cols: Vec<Vec<BlsScalar>>) -> Vec<BlsScalar> {
+		let res = cols
+			.to_vec()
+			.into_iter()
+			.map(|col| col[0..col.len() / 2].to_vec())
+			.flatten()
+			.collect::<Vec<_>>();
+		res
+	}
+
 	fn app_extrinsics_from_vec(vec: &Vec<(u32, Vec<u8>)>) -> Vec<AppExtrinsic> {
 		vec.iter()
 			.map(|a| AppExtrinsic {
@@ -792,7 +802,7 @@ Let's see how this gets encoded and then reconstructed by sampling only some dat
 
 		let cols = coded.chunks_exact(extended_dims.rows).collect::<Vec<_>>();
 
-		EvaluationDomain::new(extended_dims.rows).unwrap();
+		let eval_domain = EvaluationDomain::new(extended_dims.rows).unwrap();
 		let res = cols
 			.iter()
 			.map(|e| {
@@ -821,15 +831,15 @@ Let's see how this gets encoded and then reconstructed by sampling only some dat
 				// dbg!(reconstructed.clone());
 				// assert_eq!(&reconstructed, e);
 				// reconstructed
-				// eval_domain.ifft(&reconstructed)
-				reconstructed
+				eval_domain.ifft(&reconstructed)
+				// reconstructed
 			})
 			.collect::<Vec<_>>();
 
 		// dbg!(res.clone());
 		// assert_eq!(res, cols);
 		assert!(res.len() % 2 == 0);
-		let scalars = truncate_flatten_matrix(res)
+		let scalars = truncate_flatten_matrix2(res)
 			.iter()
 			.flat_map(|e| e.to_bytes())
 			.collect::<Vec<_>>();
