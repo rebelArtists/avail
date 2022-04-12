@@ -9,9 +9,6 @@ use crate::traits::ExtrinsicsWithCommitment;
 
 /// Customized extrinsics root to save the commitment.
 #[derive(PartialEq, Eq, Clone, sp_core::RuntimeDebug, Default, Encode, Decode, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
-#[cfg_attr(feature = "std", serde(deny_unknown_fields))]
 pub struct KateCommitment<HashOutput> {
 	/// The merkle root of the extrinsics.
 	pub hash: HashOutput,
@@ -21,6 +18,32 @@ pub struct KateCommitment<HashOutput> {
 	pub rows: u16,
 	/// Cols
 	pub cols: u16,
+}
+
+#[cfg(feature = "std")]
+impl<HashOutput: Encode> Serialize
+	for KateCommitment<HashOutput>
+{
+	fn serialize<S>(&self, seq: S) -> Result<S::Ok, S::Error>
+	where
+		S: ::serde::Serializer,
+	{
+		self.using_encoded(|bytes| sp_core::bytes::serialize(bytes, seq))
+	}
+}
+
+#[cfg(feature = "std")]
+impl<'a, HashOutput: Decode>
+	Deserialize<'a> for KateCommitment<HashOutput>
+{
+	fn deserialize<D>(de: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'a>,
+	{
+		let r = sp_core::bytes::deserialize(de)?;
+		Decode::decode(&mut &r[..])
+			.map_err(|e| serde::de::Error::custom(format!("Decode error: {}", e)))
+	}
 }
 
 /// Marker trait for types `T` that can be use as `Hash` in `ExtrinsicsRoot`.
