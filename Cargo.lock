@@ -2985,8 +2985,6 @@ dependencies = [
  "rand_core 0.5.1",
  "rayon",
  "serde",
- "sp-core",
- "sp-std",
  "static_assertions",
  "test-case",
 ]
@@ -2998,11 +2996,11 @@ dependencies = [
  "anyhow",
  "dusk-bytes",
  "dusk-plonk",
+ "frame-support",
  "hex",
  "merlin 3.0.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "sp-core",
 ]
 
 [[package]]

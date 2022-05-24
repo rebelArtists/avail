@@ -365,6 +365,8 @@ pub fn build_commitments(
 	extrinsics_by_key: &[AppExtrinsic],
 	rng_seed: Seed,
 ) -> Result<(XtsLayout, Vec<u8>, BlockDimensions, Vec<BlsScalar>), Error> {
+    use frame_support::sp_io::hashing::blake2_128;
+
 	let start = Instant::now();
 
 	// generate data matrix first
@@ -395,7 +397,7 @@ pub fn build_commitments(
 	let public_params = testnet::public_params(MAX_BLOCK_COLUMNS as usize);
 	if log::log_enabled!(target: LOG_TARGET, log::Level::Debug) {
 		let raw_pp = public_params.to_raw_var_bytes();
-		let hash_pp = hex::encode(sp_core::blake2_128(&raw_pp));
+		let hash_pp = hex::encode(blake2_128(&raw_pp));
 		let hex_pp = hex::encode(raw_pp);
 		log::debug!(
 			target: LOG_TARGET,

@@ -7,6 +7,7 @@ use dusk_plonk::{
 	commitment_scheme::kzg10::{commitment::Commitment, proof::Proof},
 	fft::EvaluationDomain,
 };
+use frame_support::sp_io::hashing::blake2_128;
 use merlin::Transcript;
 
 mod testnet {
@@ -83,7 +84,7 @@ pub fn kc_verify_proof(
 
 	Ok(ProofVerification {
 		status,
-		public_params_hash: hex::encode(sp_core::blake2_128(&raw_pp)),
+		public_params_hash: hex::encode(blake2_128(&raw_pp)),
 		public_params_len: hex::encode(raw_pp).len(),
 	})
 }
