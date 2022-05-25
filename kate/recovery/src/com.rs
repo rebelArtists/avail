@@ -1,29 +1,127 @@
-use std::{convert::TryInto, ops::Range};
+use std::{collections::HashMap, convert::TryInto, ops::Range};
 
+use codec::Decode;
 use dusk_bytes::Serializable;
 use dusk_plonk::{fft::EvaluationDomain, prelude::BlsScalar};
+use thiserror::Error;
 
 // TODO: Constants are copy from kate crate, we should move them to common place
+pub const CHUNK_SIZE: usize = 32;
 pub const DATA_CHUNK_SIZE: usize = 31;
 const PADDING_TAIL_VALUE: u8 = 0x80;
 
-// Reconstructs app extrinsics from extrinsics layout and data
-pub fn reconstruct_app_extrinsics(
-	xt_layout: Vec<(u32, u32)>,
-	columns: Vec<Vec<Cell>>,
-	column_length: usize,
-	chunk_size: usize,
-) -> Vec<(u32, Vec<u8>)> {
-	let reconstructed = columns
-		.iter()
-		.map(|cells| reconstruct_column(column_length * 2, cells).unwrap())
-		.collect::<Vec<_>>();
-	let scalars = reconstructed
-		.iter()
-		.flat_map(|e| e.iter().flat_map(|e| e.to_bytes()).collect::<Vec<_>>())
-		.collect::<Vec<_>>();
+pub struct ExtendedMatrixDimensions {
+	pub rows: usize,
+	pub cols: usize,
+}
 
-	unflatten_padded_data(xt_layout, scalars, chunk_size)
+#[derive(Error, Debug)]
+pub enum ReconstructionError {
+	#[error("Invalid cell (col {col}, row {row})")]
+	InvalidCell { col: u16, row: u16 },
+	#[error("Duplicate cell found")]
+	DuplicateCellFound,
+	#[error("Column {0} contains less than half rows")]
+	InvalidColumn(u16),
+	#[error("Cannot reconstruct column: {0}")]
+	ColumnReconstructionError(String),
+}
+
+/// Creates hash map of columns, each being hash map of cells, from vector of cells.
+/// Intention is to be able to find duplicates and to group cells by column.
+fn map_cells(
+	dimensions: &ExtendedMatrixDimensions,
+	cells: Vec<Cell>,
+) -> Result<HashMap<u16, HashMap<u16, Cell>>, ReconstructionError> {
+	let mut result: HashMap<u16, HashMap<u16, Cell>> = HashMap::new();
+	for cell in cells {
+		let row = cell.row;
+		let col = cell.col;
+		if row as usize > dimensions.rows || col as usize > dimensions.cols {
+			return Err(ReconstructionError::InvalidCell { col, row });
+		}
+		let cells = result.entry(col).or_insert_with(HashMap::new);
+		if cells.insert(cell.row, cell).is_some() {
+			return Err(ReconstructionError::DuplicateCellFound);
+		}
+	}
+	Ok(result)
+}
+
+/// Generates empty cells of columns related to specified application ID.
+/// Function return `None` if there are no cells for given application ID.
+///
+/// # Arguments
+///
+/// * `layout` - Extrinsics layout, vector of app_id and size in chunks pairs
+/// * `dimensions` - Matrix dimensions
+/// * `app_id` - Application id
+pub fn app_specific_column_cells(
+	layout: &[(u32, u32)],
+	dimensions: &ExtendedMatrixDimensions,
+	app_id: u32,
+) -> Option<Vec<Cell>> {
+	let ranges = data_ranges(layout);
+
+	let (_, range) = ranges.iter().find(|&&(id, _)| app_id == id)?;
+
+	let row_size = dimensions.rows * CHUNK_SIZE;
+
+	let column_start = (range.start * 2 / row_size) as u16;
+	let mut column_end = (range.end * 2 / row_size) as u16;
+	if range.end * 2 % row_size > 0 {
+		column_end += 1;
+	}
+
+	Some(
+		(column_start..column_end)
+			.flat_map(|col| (0..dimensions.rows as u16).map(move |row| Cell::new_empty(col, row)))
+			.collect::<Vec<_>>(),
+	)
+}
+
+/// Reconstructs app extrinsics from extrinsics layout and data.
+/// If app_id is `None`, all extrinsics are reconstructed.
+/// If app_id is provided, only related extrinsics are reconstructed.
+/// Only related data cells needs to be in matrix (unrelated columns can be empty).
+///
+/// # Arguments
+///
+/// * `layout` - Extrinsics layout, vector of app_id and size in chunks pairs
+/// * `dimensions` - Matrix dimensions
+/// * `cells` - Cells from required columns, at least 50% cells per column
+/// * `app_id` - Optional application id
+pub fn reconstruct_app_extrinsics(
+	layout: &[(u32, u32)],
+	dimensions: &ExtendedMatrixDimensions,
+	cells: Vec<Cell>,
+	app_id: Option<u32>,
+) -> Result<Vec<(u32, Vec<Vec<u8>>)>, ReconstructionError> {
+	let mut column_numbers: Vec<u16> = vec![];
+	let mut data: Vec<u8> = vec![];
+	let cells_map = map_cells(dimensions, cells)?;
+	for column_number in 0..dimensions.cols as u16 {
+		match cells_map.get(&column_number) {
+			None => data.extend(vec![0; dimensions.rows / 2 * CHUNK_SIZE]),
+			Some(column_cells) => {
+				if column_cells.len() < dimensions.rows / 2 {
+					return Err(ReconstructionError::InvalidColumn(column_number));
+				}
+				let cells = column_cells.values().cloned().collect::<Vec<_>>();
+				let scalars = reconstruct_column(dimensions.rows, &cells)
+					.map_err(ReconstructionError::ColumnReconstructionError)?;
+				let column_data = scalars.iter().flat_map(|e| e.to_bytes());
+				column_numbers.push(column_number);
+				data.extend(column_data);
+			},
+		}
+	}
+
+	let ranges = data_ranges(layout)
+		.into_iter()
+		.filter(|(id, _)| app_id.is_none() || Some(*id) == app_id)
+		.collect::<Vec<_>>();
+	Ok(unflatten_padded_data(ranges, data, CHUNK_SIZE))
 }
 
 fn trim_to_chunk_data(chunk: &[u8]) -> [u8; DATA_CHUNK_SIZE] {
@@ -31,34 +129,39 @@ fn trim_to_chunk_data(chunk: &[u8]) -> [u8; DATA_CHUNK_SIZE] {
 	chunk[0..DATA_CHUNK_SIZE].try_into().unwrap()
 }
 
+/// Calculates range per application from extrinsics layout.
+/// Range is from start index to end index in matrix flattened as byte array.
+///
+/// # Arguments
+///
+/// * `layout` - Extrinsics layout, vector of app_id and size in chunks pairs
+pub fn data_ranges(layout: &[(u32, u32)]) -> Vec<(u32, Range<usize>)> {
+	let (_, ranges) = layout
+		.iter()
+		.cloned()
+		.fold((0, vec![]), |(start, mut v), (app_id, size)| {
+			let end = start + (size as usize) * CHUNK_SIZE;
+			v.push((app_id, Range { start, end }));
+			(end, v)
+		});
+	ranges
+}
+
 // Removes both extrinsics and block padding (iec_9797 and seeded random data)
 pub fn unflatten_padded_data(
-	layout: Vec<(u32, u32)>,
+	layout: Vec<(u32, Range<usize>)>,
 	data: Vec<u8>,
 	chunk_size: usize,
-) -> Vec<(u32, Vec<u8>)> {
+) -> Vec<(u32, Vec<Vec<u8>>)> {
 	assert!(data.len() % chunk_size == 0);
-	let data = data
-		.chunks(chunk_size)
-		.flat_map(|e| trim_to_chunk_data(e).to_vec())
-		.collect::<Vec<_>>();
+
 	layout
 		.iter()
-		.fold(vec![], |acc: Vec<(u32, Range<usize>)>, (i, len)| {
-			let mut v = acc;
-			let (_, prev_range) = v
-				.last()
-				.unwrap_or(&(0u32, Range { start: 0, end: 0 }))
-				.clone();
-			v.push((*i, Range {
-				start: prev_range.end as usize,
-				end: prev_range.end as usize + *len as usize * DATA_CHUNK_SIZE,
-			}));
-			v
-		})
-		.iter()
 		.map(|(app_id, range)| {
-			let orig = data[range.clone()].to_vec();
+			let orig = data[range.clone()]
+				.chunks_exact(chunk_size)
+				.flat_map(trim_to_chunk_data)
+				.collect::<Vec<u8>>();
 
 			let trimmed = orig
 				.iter()
@@ -73,7 +176,10 @@ pub fn unflatten_padded_data(
 				orig
 			};
 
-			(*app_id, data)
+			let mut encoded_data = data.as_slice();
+			let decoded_data = <Vec<Vec<u8>>>::decode(&mut encoded_data).unwrap();
+
+			(*app_id, decoded_data)
 		})
 		.collect::<Vec<_>>()
 }
@@ -203,6 +309,16 @@ pub struct Cell {
 	pub data: Vec<u8>,
 }
 
+impl Cell {
+	pub fn new_empty(col: u16, row: u16) -> Self {
+		Cell {
+			row,
+			col,
+			data: vec![],
+		}
+	}
+}
+
 // use this function for reconstructing back all cells of certain column
 // when at least 50% of them are available
 //
@@ -267,6 +383,47 @@ mod tests {
 	use rand_chacha::ChaChaRng;
 
 	use super::*;
+
+	#[test]
+	fn test_app_specific_column_cells() {
+		let layout = vec![(0, 5), (1, 3)];
+		let dimensions = ExtendedMatrixDimensions { rows: 4, cols: 4 };
+
+		let expected_0 = (0..=2).flat_map(|c| (0..=3).map(move |r| (c, r)));
+		let result_0 = app_specific_column_cells(&layout, &dimensions, 0).unwrap();
+
+		assert_eq!(expected_0.clone().count(), result_0.len());
+		result_0.iter().zip(expected_0).for_each(|(a, (col, row))| {
+			assert_eq!(a.col, col);
+			assert_eq!(a.row, row);
+		});
+
+		let expected_1 = (2..=3).flat_map(|c| (0..=3).map(move |r| (c, r)));
+		let result_1 = app_specific_column_cells(&layout, &dimensions, 1).unwrap();
+
+		assert_eq!(expected_1.clone().count(), result_1.len());
+		result_1.iter().zip(expected_1).for_each(|(a, (col, row))| {
+			assert_eq!(a.col, col);
+			assert_eq!(a.row, row);
+		});
+
+		assert!(app_specific_column_cells(&layout, &dimensions, 2).is_none());
+	}
+
+	#[test]
+	fn test_app_specific_column_cells_gt_chunk_size() {
+		let layout = vec![(0, 1), (1, 89)];
+		let dimensions = ExtendedMatrixDimensions { rows: 2, cols: 128 };
+		let expected = (1..=89).flat_map(|col| (0..=1).map(move |row| (col, row)));
+
+		let result = app_specific_column_cells(&layout, &dimensions, 1).unwrap();
+
+		assert_eq!(expected.clone().count(), result.len());
+		result.iter().zip(expected).for_each(|(a, (col, row))| {
+			assert_eq!(a.col, col);
+			assert_eq!(a.row, row);
+		});
+	}
 
 	#[test]
 	fn data_reconstruction_success() {
