@@ -66,10 +66,11 @@ where
 	Client: ProvideRuntimeApi<Block> + StorageProvider<Block, sc_client_db::Backend<Block>>,
 	Client::Api: KateParamsGetter<Block>,
 {
-	/// Fetches the VRF.
-	pub fn vrf(&self, block_id: &BlockId<Block>) -> Result<VRFSeed> {
+	/// Fetches the VRF or `[0u8;32]` if VRF is not available yet.
+	pub fn vrf(&self, block_id: &BlockId<Block>) -> VRFSeed {
 		Self::runtime_vrf(self.client.clone(), block_id)
 			.or_else(|_| Self::raw_vrf(self.client.clone(), block_id))
+			.unwrap_or_default()
 	}
 
 	/// Fetches the VRF using the Runtime.
@@ -167,7 +168,7 @@ where
 				.collect();
 
 			// Use Babe's VRF
-			let seed = self.vrf(&block_id)?;
+			let seed = self.vrf(&block_id);
 
 			let (_, block, block_dims) = kate::com::flatten_and_pad_block(
 				block_length.rows as usize,
