@@ -3,13 +3,14 @@ use std::sync::{Arc, RwLock};
 use codec::Encode;
 use da_primitives::asdr::{AppExtrinsic, AppId, GetAppId};
 use dusk_plonk::commitment_scheme::kzg10::PublicParameters;
+use frame_support::storage::storage_prefix;
 use frame_system::limits::BlockLength;
 use jsonrpc_core::{Error as RpcError, Result};
 use jsonrpc_derive::rpc;
 use kate::BlockDimensions;
 use kate_rpc_runtime_api::KateParamsGetter;
 use lru::LruCache;
-use sc_client_api::{BlockBackend, StorageProvider};
+use sc_client_api::{BlockBackend, StorageKey, StorageProvider};
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_rpc::number::NumberOrHex;
@@ -17,6 +18,8 @@ use sp_runtime::{
 	generic::BlockId,
 	traits::{Block as BlockT, Header, NumberFor},
 };
+
+pub type VRFSeed = [u8; 32];
 
 #[rpc]
 pub trait KateApi {
@@ -29,6 +32,14 @@ pub trait KateApi {
 
 	#[rpc(name = "kate_blockLength")]
 	fn query_block_length(&self) -> Result<BlockLength>;
+}
+
+macro_rules! internal_err {
+	($($arg:tt)*) => {{
+		let mut error = RpcError::internal_error();
+		error.message = format!($($arg)*);
+		error
+	}}
 }
 
 pub struct Kate<Client, Block: BlockT> {
@@ -49,6 +60,42 @@ where
 	}
 }
 
+impl<Client, Block> Kate<Client, Block>
+where
+	Block: BlockT,
+	Client: ProvideRuntimeApi<Block> + StorageProvider<Block, sc_client_db::Backend<Block>>,
+	Client::Api: KateParamsGetter<Block>,
+{
+	/// Fetches the VRF.
+	pub fn vrf(self, block_id: &BlockId<Block>) -> Result<VRFSeed> {
+		Self::runtime_vrf(self.client.clone(), block_id)
+			.or_else(|_| Self::raw_vrf(self.client.clone(), block_id))
+	}
+
+	/// Fetches the VRF using the Runtime.
+	fn runtime_vrf(client: Arc<Client>, block_id: &BlockId<Block>) -> Result<VRFSeed> {
+		client
+			.runtime_api()
+			.get_babe_vrf(&block_id)
+			.map_err(|e| internal_err!("Runtime Babe VRF not found at block {}: {:?}", block_id, e))
+	}
+
+	/// Fetches the VRF using raw access on legacy Runtimes.
+	fn raw_vrf(client: Arc<Client>, block_id: &BlockId<Block>) -> Result<VRFSeed> {
+		let randomness_key = StorageKey(storage_prefix(b"Babe", b"Randomness").to_vec());
+		let raw_seed = client
+			.storage(block_id, &randomness_key)
+			.map_err(|_| internal_err!("Babe::Randomness key is invalid"))?
+			.ok_or_else(|| internal_err!("Missing Babe::Randomness at block {:?}", block_id))?
+			.0;
+
+		raw_seed
+			.clone()
+			.try_into()
+			.map_err(|_| internal_err!("Raw seed ({:?}) is invalid .qed", raw_seed))
+	}
+}
+
 /// Error type of this RPC api.
 pub enum Error {
 	/// The transaction was not decodable.
@@ -64,14 +111,6 @@ impl From<Error> for i64 {
 			Error::DecodeError => 2,
 		}
 	}
-}
-
-macro_rules! internal_err {
-	($($arg:tt)*) => {{
-		let mut error = RpcError::internal_error();
-		error.message = format!($($arg)*);
-		error
-	}}
 }
 
 impl<Client, Block> KateApi for Kate<Client, Block>
@@ -128,13 +167,7 @@ where
 				.collect();
 
 			// Use Babe's VRF
-			let seed: [u8; 32] =
-				self.client
-					.runtime_api()
-					.get_babe_vrf(&block_id)
-					.map_err(|e| {
-						internal_err!("Babe VRF not found for block {}: {:?}", block_num, e)
-					})?;
+			let seed = self.vrf(&block_id)?;
 
 			let (_, block, block_dims) = kate::com::flatten_and_pad_block(
 				block_length.rows as usize,
