@@ -67,7 +67,7 @@ where
 	Client::Api: KateParamsGetter<Block>,
 {
 	/// Fetches the VRF.
-	pub fn vrf(self, block_id: &BlockId<Block>) -> Result<VRFSeed> {
+	pub fn vrf(&self, block_id: &BlockId<Block>) -> Result<VRFSeed> {
 		Self::runtime_vrf(self.client.clone(), block_id)
 			.or_else(|_| Self::raw_vrf(self.client.clone(), block_id))
 	}
