@@ -1346,7 +1346,7 @@ dependencies = [
 
 [[package]]
 name = "data-avail"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "da-control",
  "da-primitives",
