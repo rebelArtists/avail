@@ -11,12 +11,12 @@ use kate::BlockDimensions;
 use kate_rpc_runtime_api::KateParamsGetter;
 use lru::LruCache;
 use sc_client_api::{BlockBackend, StorageKey, StorageProvider};
-use sp_api::ProvideRuntimeApi;
+use sp_api::{HashT, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
 use sp_rpc::number::NumberOrHex;
 use sp_runtime::{
 	generic::BlockId,
-	traits::{Block as BlockT, Header, NumberFor},
+	traits::{BlakeTwo256, Block as BlockT, Header, NumberFor},
 };
 
 pub type VRFSeed = [u8; 32];
@@ -66,8 +66,10 @@ where
 	Client: ProvideRuntimeApi<Block> + StorageProvider<Block, sc_client_db::Backend<Block>>,
 	Client::Api: KateParamsGetter<Block>,
 {
+	pub fn random_seed(&self, block_id: &BlockId<Block>) -> VRFSeed { self.vrf(block_id) }
+
 	/// Fetches the VRF or `[0u8;32]` if VRF is not available yet.
-	pub fn vrf(&self, block_id: &BlockId<Block>) -> VRFSeed {
+	fn vrf(&self, block_id: &BlockId<Block>) -> VRFSeed {
 		Self::runtime_vrf(self.client.clone(), block_id)
 			.or_else(|_| Self::raw_vrf(self.client.clone(), block_id))
 			.unwrap_or_default()
@@ -84,16 +86,16 @@ where
 	/// Fetches the VRF using raw access on legacy Runtimes.
 	fn raw_vrf(client: Arc<Client>, block_id: &BlockId<Block>) -> Result<VRFSeed> {
 		let randomness_key = StorageKey(storage_prefix(b"Babe", b"Randomness").to_vec());
-		let raw_seed = client
+		let epoc_and_block = client
 			.storage(block_id, &randomness_key)
 			.map_err(|_| internal_err!("Babe::Randomness key is invalid"))?
 			.ok_or_else(|| internal_err!("Missing Babe::Randomness at block {:?}", block_id))?
 			.0;
 
-		raw_seed
-			.clone()
-			.try_into()
-			.map_err(|_| internal_err!("Raw seed ({:?}) is invalid .qed", raw_seed))
+		let seed = BlakeTwo256::hash_of(&epoc_and_block);
+		log::info!("VRF Seed {:?} for block {:?}", seed, block_id);
+
+		Ok(seed.into())
 	}
 }
 
@@ -168,7 +170,8 @@ where
 				.collect();
 
 			// Use Babe's VRF
-			let seed = self.vrf(&block_id);
+			let seed = self.random_seed(&block_id);
+			log::info!("VRF Seed {:?} for block {:?}", seed, block_id);
 
 			let (_, block, block_dims) = kate::com::flatten_and_pad_block(
 				block_length.rows as usize,

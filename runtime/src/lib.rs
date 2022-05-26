@@ -1290,7 +1290,6 @@ impl_runtime_apis! {
 
 			seed.into()
 		}
-
 	}
 
 	impl sp_session::SessionKeys<Block> for Runtime {
