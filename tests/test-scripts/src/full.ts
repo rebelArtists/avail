@@ -13,7 +13,7 @@ async function cli_arguments() {
             description: 'WSS endpoint',
             alias: 'endpoint',
             type: 'string',
-            default: 'wss://polygon-da-explorer.matic.today/ws'
+            default: 'wss://testnet.polygonavail.net/ws'
         },
 
         s: {
@@ -37,7 +37,7 @@ async function cli_arguments() {
             default: 'submit_data'
         },
 
-        id: {
+        i: {
             description: 'app id to be given',
             alias: 'app_id',
             type: 'number',
@@ -103,6 +103,14 @@ function generateRandomBinary(size: number) {
     return binary;
 }
 
+const generateData = (size: number) => {
+    let buffer = Buffer.alloc(size)
+    for (let i = 0; i < size; i++) {
+        buffer.writeUInt8(Math.floor(Math.random() * 256), i)
+    }
+    return buffer.toString('hex')
+}
+
 //async funtion to get the nonce 
 async function getNonce(api: ApiPromise, address: any): Promise<number> {
     const nonce = (await api.rpc.system.accountNextIndex(address)).toNumber();
@@ -113,11 +121,11 @@ async function sendTx(api: ApiPromise, sender: KeyringPair, nonce: number, argv:
     try {
 
         let payload = argv.s;
-        let data = generateRandomBinary(payload);
+        let data = generateData(payload);
         let submit = await api.tx.dataAvailability.submitData(data);
         /* @note here app_id is 1,
         but if you want to have one your own then create one first before initialising here */
-        const options: Partial<any> = { app_id: argv.id, nonce: nonce }
+        const options: Partial<any> = { app_id: argv.i, nonce: nonce }
         const res = await submit
             .signAndSend(
                 sender,  // sender
