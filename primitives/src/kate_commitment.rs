@@ -1,15 +1,15 @@
 use codec::{Codec, Decode, Encode};
 use scale_info::TypeInfo;
 #[cfg(feature = "std")]
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize};
 use sp_runtime::traits::Member;
 use sp_std::vec::Vec;
 
-use crate::traits::ExtrinsicsWithCommitment;
+use crate::{traits::ExtrinsicsWithCommitment};
 
 /// Customized extrinsics root to save the commitment.
 #[derive(PartialEq, Eq, Clone, sp_core::RuntimeDebug, Default, Encode, Decode, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", derive(Deserialize))]
 #[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "std", serde(deny_unknown_fields))]
 pub struct KateCommitment<HashOutput> {
@@ -22,6 +22,26 @@ pub struct KateCommitment<HashOutput> {
 	/// Cols
 	pub cols: u16,
 }
+
+#[cfg(feature = "std")]
+impl<HashOutput: Encode> serde::Serialize for KateCommitment<HashOutput> {
+	fn serialize<S>(&self, seq: S) -> Result<S::Ok, S::Error>
+	where
+		S: ::serde::Serializer,
+	{
+		self.using_encoded(|bytes| sp_core::bytes::serialize(bytes, seq))
+	}
+}
+// #[cfg(feature = "std")]
+// impl<'a, HashOutput: Decode> serde::Deserialize<'a> for KateCommitment<HashOutput> {
+// 	fn deserialize<D>(de: D) -> Result<Self, D::Error>
+// 	where
+// 		D: Deserializer<'a>,
+// 	{
+// 		let encoded = <Vec<u8>>::deserialize(de)?;
+// 		Decode::decode(&mut &encoded[..]).map_err(|e| serde::de::Error::custom(e.to_string()))
+// 	}
+// }
 
 /// Marker trait for types `T` that can be use as `Hash` in `ExtrinsicsRoot`.
 pub trait KateExtrinsicHash: Member + Codec {}
