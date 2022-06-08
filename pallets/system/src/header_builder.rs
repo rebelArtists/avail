@@ -106,6 +106,22 @@ pub trait HostedHeaderBuilder {
 
 		use crate::generic::DigestItem;
 
+		let xts = app_extrinsics.clone();
+
+		for e in xts {
+			// let d = <Vec<Vec<u8>>>::decode(&mut e.data.clone().as_slice()).unwrap();
+			let data_hex_string = e.data.iter().fold(String::new(), |mut acc, e| {
+				acc.push_str(format!("{:02x}", e).as_str());
+				acc
+			});
+			log::debug!(
+				"MIRKO extrinsic: app_id={}, data={:?}",
+				e.app_id,
+				data_hex_string
+			);
+		}
+		// log::debug!(target: LOG_TARGET, "MIRKO xt: {:?}", app_extrinsics);
+
 		let (kate_commitment, block_dims, data_index) = {
 			let (xts_layout, kate_commitment, block_dims, _data_matrix) =
 				kate::com::build_commitments(
