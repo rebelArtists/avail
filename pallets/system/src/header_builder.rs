@@ -79,7 +79,7 @@ pub trait HeaderBuilder {
 
 		log::info!(
 			target: LOG_TARGET,
-			"Header builder seed {:?} from epoch seed {:?} and block {:?}",
+			"MIRKO Header builder seed {:?} from epoch seed {:?} and block {:?}",
 			seed,
 			epoch_seed,
 			block_number
