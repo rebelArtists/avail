@@ -106,9 +106,11 @@ pub trait HostedHeaderBuilder {
 
 		use crate::generic::DigestItem;
 
-		let xts = app_extrinsics.clone();
+		let mut xts = app_extrinsics.clone();
+		let x = xts.clone();
+		xts.sort_by(|a, b| a.app_id.cmp(&b.app_id));
 
-		for e in xts {
+		for e in x {
 			// let d = <Vec<Vec<u8>>>::decode(&mut e.data.clone().as_slice()).unwrap();
 			let data_hex_string = e.data.iter().fold(String::new(), |mut acc, e| {
 				acc.push_str(format!("{:02x}", e).as_str());
@@ -128,7 +130,7 @@ pub trait HostedHeaderBuilder {
 					block_length.rows as usize,
 					block_length.cols as usize,
 					block_length.chunk_size() as usize,
-					app_extrinsics.as_slice(),
+					xts.as_slice(),
 					seed,
 				)
 				.expect("Build commitments cannot fail .qed");
