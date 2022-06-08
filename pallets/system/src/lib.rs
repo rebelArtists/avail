@@ -1530,7 +1530,13 @@ impl<T: Config> Pallet<T> {
 			.map(ExtrinsicData::<T>::take)
 			.collect::<Vec<_>>();
 		// sort extrinsics by key
-		extrinsics.sort_by(|a: &AppExtrinsic, b: &AppExtrinsic| a.app_id.cmp(&b.app_id));
+		extrinsics.sort_by(|a: &AppExtrinsic, b: &AppExtrinsic| {
+			let mut a_1 = a.app_id.to_be_bytes().to_vec();
+			a_1.extend(a.data.clone());
+			let mut b_1 = b.app_id.to_be_bytes().to_vec();
+			b_1.extend(b.data.clone());
+			a_1.cmp(&b_1)
+		});
 		extrinsics
 	}
 

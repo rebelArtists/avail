@@ -117,7 +117,7 @@ where
 
 		if !block_ext_cache.contains(&block_hash) {
 			// build block data extension and cache it
-			let xts_by_id: Vec<AppExtrinsic> = signed_block
+			let mut xts_by_id: Vec<AppExtrinsic> = signed_block
 				.block
 				.extrinsics()
 				.iter()
@@ -126,6 +126,14 @@ where
 					data: e.encode(),
 				})
 				.collect();
+
+			xts_by_id.sort_by(|a: &AppExtrinsic, b: &AppExtrinsic| {
+				let mut a_1 = a.app_id.to_be_bytes().to_vec();
+				a_1.extend(a.data.clone());
+				let mut b_1 = b.app_id.to_be_bytes().to_vec();
+				b_1.extend(b.data.clone());
+				a_1.cmp(&b_1)
+			});
 
 			// Use Babe's VRF
 			let seed: [u8; 32] =

@@ -77,7 +77,7 @@ pub trait HeaderBuilder {
 		let (epoch_seed, block_number) = <T as Config>::Randomness::random_seed();
 		let seed = <T as Config>::Hashing::hash_of(&(&epoch_seed, &block_number));
 
-		log::trace!(
+		log::info!(
 			target: LOG_TARGET,
 			"Header builder seed {:?} from epoch seed {:?} and block {:?}",
 			seed,
