@@ -25,9 +25,9 @@ jobs:
            uses: svenstaro/upload-release-action@v2
            with:
              repo_token: ${{ secrets.PAT_TOKEN }}
-             file: Dockerfile
+             file: entrypoint.sh
              asset_name: data-avail_centos_amd64
-             tag: latest
+             tag: "latest"
 
   binary_linux_amd64:
     runs-on: ubuntu-latest
