@@ -12,7 +12,7 @@ RUN \
 	mkdir -p /da/bin && \
 	mkdir -p /da/genesis && \
 	# Build DA \
-	cp -r misc/genesis /da && \
+	cp -r ./misc/genesis /da && \
 	cargo build --release -p data-avail && \
 	# Install binaries \
 	mv target/release/data-avail /da/bin && \
