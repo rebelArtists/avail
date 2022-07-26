@@ -34,7 +34,7 @@ jobs:
             source "$HOME/.cargo/env"
             cargo build --release -p data-avail
 
-  docker_releases:
+  docker_linux_amd64:
     runs-on: ubuntu-latest
     steps:
       -
@@ -43,8 +43,6 @@ jobs:
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v2
-        with:
-          platforms: 'arm64,arm'
       -
         name: Set up Docker Buildx
         id: buildx
@@ -53,21 +51,8 @@ jobs:
         name: Prepare
         id: prepare
         run: |
-          DOCKER_IMAGE=rebelartists/tests
-          DOCKER_PLATFORMS=linux/amd64,linux/arm64
-          VERSION=latest
-          TAGS="--tag ${DOCKER_IMAGE}:${VERSION}"
-
-          echo ::set-output name=docker_image::${DOCKER_IMAGE}
-          echo ::set-output name=version::${VERSION}
-          echo ::set-output name=buildx_args::--platform ${DOCKER_PLATFORMS} \
-            --build-arg VERSION=${VERSION} \
-            --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-            --build-arg VCS_REF=${GITHUB_SHA::8} \
-            ${TAGS} --file ./Dockerfile ./
-      -
-        name: Set up Docker Buildx
-        uses: crazy-max/ghaction-docker-buildx@v3
+            TAG=${GITHUB_REF#refs/tags/}
+            echo ::set-output name=tag_name::${TAG}
       -
         name: Login to DockerHub
         uses: docker/login-action@v2
@@ -75,7 +60,31 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
-        name: Docker Buildx (push)
-        if: success() && github.event_name != 'pull_request'
-        run: |
-          docker buildx build --output "type=image,push=true" ${{ steps.prepare.outputs.buildx_args }}
+        name: Build and push images
+        uses: docker/build-push-action@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: rebelartists/tests:latest
+
+  docker_linux_arm64:
+    # The host should always be Linux
+    runs-on: ubuntu-18.04
+    name: Build on ubuntu-18.04 arm64
+    steps:
+      - uses: actions/checkout@v2.1.0
+      - uses: uraimo/run-on-arch-action@v2
+        name: Run commands
+        id: runcmd
+        with:
+          arch: aarch64
+          distro: ubuntu18.04
+
+          # Set an output parameter `uname` for use in subsequent steps
+          run: |
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+            source "$HOME/.cargo/env"
+            cargo build --release -p data-avail
