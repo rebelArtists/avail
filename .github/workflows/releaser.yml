@@ -2,28 +2,34 @@ name: Polygon Avail Releaser
 on: push
 
 jobs:
-  # release_centos7_amd64:
-  #   runs-on: ubuntu-latest
-  #   container:
-  #     image: amd64/centos:centos7
-  #   env:
-  #     AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  #     AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  #   steps:
-  #        - uses: actions/checkout@v2
-  #        - name: install cargo deps and build avail
-  #          run: |
-  #           yum install centos-release-scl -y
-  #           yum install llvm-toolset-7 -y
-  #           yum install gcc-c++ -y
-  #           scl enable llvm-toolset-7 bash
-  #           export PATH="/opt/rh/llvm-toolset-7/root/usr/bin:$PATH"
-  #           export LIBCLANG_PATH="/opt/rh/llvm-toolset-7/root/usr/lib64/"
-  #           curl https://sh.rustup.rs -sSf | sh -s -- -y
-  #           source "$HOME/.cargo/env"
-  #           cargo build --release -p data-avail
+  binary_centos7_amd64:
+    runs-on: ubuntu-latest
+    container:
+      image: amd64/centos:centos7
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    steps:
+         - uses: actions/checkout@v2
+         - name: install cargo deps and build avail
+           run: |
+            yum install centos-release-scl -y
+            yum install llvm-toolset-7 -y
+            yum install gcc-c++ -y
+            scl enable llvm-toolset-7 bash
+            export PATH="/opt/rh/llvm-toolset-7/root/usr/bin:$PATH"
+            export LIBCLANG_PATH="/opt/rh/llvm-toolset-7/root/usr/lib64/"
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+            source "$HOME/.cargo/env"
+         - name: Upload binaries to release
+           uses: svenstaro/upload-release-action@v2
+           with:
+             repo_token: ${{ secrets.PAT_TOKEN }}
+             file: Dockerfile
+             asset_name: data-avail_centos_amd64
+             tag: latest
 
-  release_linux_amd64:
+  binary_linux_amd64:
     runs-on: ubuntu-latest
     steps:
          - uses: actions/checkout@v2
@@ -69,22 +75,3 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: rebelartists/tests:latest
-
-  docker_linux_arm64:
-    # The host should always be Linux
-    runs-on: ubuntu-18.04
-    name: Build on ubuntu-18.04 arm64
-    steps:
-      - uses: actions/checkout@v2.1.0
-      - uses: uraimo/run-on-arch-action@v2
-        name: Run commands
-        id: runcmd
-        with:
-          arch: aarch64
-          distro: ubuntu18.04
-
-          # Set an output parameter `uname` for use in subsequent steps
-          run: |
-            curl https://sh.rustup.rs -sSf | sh -s -- -y
-            source "$HOME/.cargo/env"
-            cargo build --release -p data-avail
