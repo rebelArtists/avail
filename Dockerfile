@@ -4,15 +4,17 @@ FROM paritytech/ci-linux:production as builder
 
 RUN apt-get update && \
 	apt-get install -y git openssh-client && \
-	rm -rf /var/lib/apt/lists
+	rm -rf /var/lib/apt/lists && \
+  mkdir -p /avail
+
+COPY . /avail/
 
 RUN \
 	mkdir -p /da/bin && \
-	mkdir -p /da/genesis
-
-COPY ./misc/genesis/ /da
-
-RUN \
+	mkdir -p /da/genesis && \
+	# Build DA \
+	cp -r /avail/misc/genesis /da && \
+	cd /avail && \
 	cargo build --release -p data-avail && \
 	# Install binaries \
 	mv target/release/data-avail /da/bin
