@@ -27,7 +27,8 @@ jobs:
              repo_token: ${{ secrets.PAT_TOKEN }}
              file: entrypoint.sh
              asset_name: data-avail_centos_amd64
-             tag: "latest"
+             release_name: latest-alpha
+             tag: latest-alpha
 
   binary_linux_amd64:
     runs-on: ubuntu-latest
