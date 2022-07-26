@@ -23,21 +23,16 @@ jobs:
   #           source "$HOME/.cargo/env"
   #           cargo build --release -p data-avail
 
-  # release_linux_amd64:
-  #   runs-on: ubuntu-latest
-  #   container:
-  #     image: amd64/ubuntu:jammy
-  #   env:
-  #     AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  #     AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  #   steps:
-  #        - uses: actions/checkout@v2
-  #        - name: install cargo deps and build avail
-  #          run: |
-  #           apt-get install curl -y
-  #           curl https://sh.rustup.rs -sSf | sh -s -- -y
-  #           source "$HOME/.cargo/env"
-  #           cargo build --release -p data-avail
+  release_linux_amd64:
+    runs-on: ubuntu-latest
+    steps:
+         - uses: actions/checkout@v2
+         - name: install cargo deps and build avail
+           shell: bash
+           run: |
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+            source "$HOME/.cargo/env"
+            cargo build --release -p data-avail
 
   docker_releases:
     runs-on: ubuntu-latest
@@ -72,11 +67,7 @@ jobs:
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: .
-          file: ./DockerfileTest
+          file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: rebelartists/tests:latest
-
-# add docker buildx
-
-# add binary builds for linux (arm64 need self-hosted runner...)
