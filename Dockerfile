@@ -6,19 +6,16 @@ RUN apt-get update && \
 	apt-get install -y git openssh-client && \
 	rm -rf /var/lib/apt/lists
 
-ARG BRANCH=main
-
 RUN \
 	mkdir -p /da/bin && \
-	mkdir -p /da/genesis && \
-	# Build DA \
-	cp -r ./misc/genesis /da && \
+	mkdir -p /da/genesis
+
+COPY ./misc/genesis/ /da
+
+RUN \
 	cargo build --release -p data-avail && \
 	# Install binaries \
-	mv target/release/data-avail /da/bin && \
-	# and clean \
-	cd .. && \
-	rm -rf avail
+	mv target/release/data-avail /da/bin
 
 
 # Phase 1: Binary deploy
