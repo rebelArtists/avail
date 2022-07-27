@@ -119,8 +119,8 @@ jobs:
            uses: svenstaro/upload-release-action@v2
            with:
              repo_token: ${{ secrets.PAT_TOKEN }}
-             file: /*
-             release_name: latest-beta
-             tag: latest-beta
+             file: /home/runner/work/avail/avail/*
+             release_name: latest-test
+             tag: latest-test
              overwrite: true
              file_glob: true
