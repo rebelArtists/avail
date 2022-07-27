@@ -2,6 +2,81 @@ name: Polygon Avail Releaser
 on: push
 
 jobs:
+  # binary_centos7_amd64:
+  #   runs-on: ubuntu-latest
+  #   container:
+  #     image: amd64/centos:centos7
+  #   env:
+  #     AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #     AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #   steps:
+  #        - uses: actions/checkout@v2
+  #        - name: install cargo deps and build avail
+  #          run: |
+  #           yum install centos-release-scl -y
+  #           yum install llvm-toolset-7 -y
+  #           yum install gcc-c++ -y
+  #           scl enable llvm-toolset-7 bash
+  #           export PATH="/opt/rh/llvm-toolset-7/root/usr/bin:$PATH"
+  #           export LIBCLANG_PATH="/opt/rh/llvm-toolset-7/root/usr/lib64/"
+  #           curl https://sh.rustup.rs -sSf | sh -s -- -y
+  #           source "$HOME/.cargo/env"
+  #           cargo build --release -p data-avail
+  #        - name: Upload binaries to release
+  #          uses: svenstaro/upload-release-action@v2
+  #          with:
+  #            repo_token: ${{ secrets.PAT_TOKEN }}
+  #            file: entrypoint.sh
+  #            asset_name: data-avail_centos_amd64
+  #            release_name: latest-alpha
+  #            tag: latest-alpha
+  #
+  # binary_linux_amd64:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #        - uses: actions/checkout@v2
+  #        - name: install cargo deps and build avail
+  #          shell: bash
+  #          run: |
+  #           curl https://sh.rustup.rs -sSf | sh -s -- -y
+  #           source "$HOME/.cargo/env"
+  #           cargo build --release -p data-avail
+  #
+  # docker_linux_amd64:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     -
+  #       name: Checkout
+  #       uses: actions/checkout@v2
+  #     -
+  #       name: Set up QEMU
+  #       uses: docker/setup-qemu-action@v2
+  #     -
+  #       name: Set up Docker Buildx
+  #       id: buildx
+  #       uses: docker/setup-buildx-action@v2
+  #     -
+  #       name: Prepare
+  #       id: prepare
+  #       run: |
+  #           TAG=${GITHUB_REF#refs/tags/}
+  #           echo ::set-output name=tag_name::${TAG}
+  #     -
+  #       name: Login to DockerHub
+  #       uses: docker/login-action@v2
+  #       with:
+  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
+  #         password: ${{ secrets.DOCKERHUB_TOKEN }}
+  #     -
+  #       name: Build and push images
+  #       uses: docker/build-push-action@v3
+  #       with:
+  #         builder: ${{ steps.buildx.outputs.name }}
+  #         context: .
+  #         file: ./Dockerfile
+  #         platforms: linux/amd64
+  #         push: true
+  #         tags: rebelartists/tests:latest
   binary_centos7_amd64:
     runs-on: ubuntu-latest
     container:
@@ -11,68 +86,40 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
          - uses: actions/checkout@v2
-         - name: install cargo deps and build avail
-           run: |
-            yum install centos-release-scl -y
-            yum install llvm-toolset-7 -y
-            yum install gcc-c++ -y
-            scl enable llvm-toolset-7 bash
-            export PATH="/opt/rh/llvm-toolset-7/root/usr/bin:$PATH"
-            export LIBCLANG_PATH="/opt/rh/llvm-toolset-7/root/usr/lib64/"
-            curl https://sh.rustup.rs -sSf | sh -s -- -y
-            source "$HOME/.cargo/env"
-         - name: Upload binaries to release
-           uses: svenstaro/upload-release-action@v2
+         - uses: actions/upload-artifact@v2
            with:
-             repo_token: ${{ secrets.PAT_TOKEN }}
-             file: entrypoint.sh
-             asset_name: data-avail_centos_amd64
-             release_name: latest-alpha
-             tag: latest-alpha
+             name: my-artifact-1
+             path: Dockerfile
 
   binary_linux_amd64:
     runs-on: ubuntu-latest
     steps:
          - uses: actions/checkout@v2
-         - name: install cargo deps and build avail
-           shell: bash
-           run: |
-            curl https://sh.rustup.rs -sSf | sh -s -- -y
-            source "$HOME/.cargo/env"
-            cargo build --release -p data-avail
+         - uses: actions/upload-artifact@v2
+           with:
+             name: my-artifact-2
+             path: entrypoint.sh
 
-  docker_linux_amd64:
+  create_release:
     runs-on: ubuntu-latest
     steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v2
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-      -
-        name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v2
-      -
-        name: Prepare
-        id: prepare
-        run: |
-            TAG=${GITHUB_REF#refs/tags/}
-            echo ::set-output name=tag_name::${TAG}
-      -
-        name: Login to DockerHub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
-        name: Build and push images
-        uses: docker/build-push-action@v3
-        with:
-          builder: ${{ steps.buildx.outputs.name }}
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: rebelartists/tests:latest
+         - uses: actions/download-artifact@v2
+           with:
+             name: my-artifact-1
+         - uses: actions/download-artifact@v2
+           with:
+             name: my-artifact-2
+         - name: review files
+           shell: bash
+           run: |
+            ls
+         - name: Upload binaries to release
+           uses: svenstaro/upload-release-action@v2
+           with:
+             repo_token: ${{ secrets.PAT_TOKEN }}
+             file: *
+             asset_name: data-avail_centos_amd64
+             release_name: latest-alpha
+             tag: latest-alpha
+             overwrite: true
+             file_glob: true
