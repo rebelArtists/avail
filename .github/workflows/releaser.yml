@@ -101,6 +101,7 @@ jobs:
              path: entrypoint.sh
 
   create_release:
+    needs: [binary_centos7_amd64, binary_linux_amd64]
     runs-on: ubuntu-latest
     steps:
          - uses: actions/download-artifact@v2
