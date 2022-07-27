@@ -27,10 +27,12 @@ jobs:
             export LIBCLANG_PATH="/opt/rh/llvm-toolset-7/root/usr/lib64/"
             curl https://sh.rustup.rs -sSf | sh -s -- -y
             source "$HOME/.cargo/env"
+            cargo build --release -p data-avail
+            mv target/release/data-avail target/release/data-avail-centos7-amd64
          - uses: actions/upload-artifact@v2
            with:
              name: data-avail-centos7-amd64-binary
-             path: Dockerfile
+             path: target/release/data-avail-centos7-amd64
 
   binary_linux_amd64:
     runs-on: ubuntu-latest
@@ -41,10 +43,12 @@ jobs:
            run: |
             curl https://sh.rustup.rs -sSf | sh -s -- -y
             source "$HOME/.cargo/env"
+            cargo build --release -p data-avail
+            mv target/release/data-avail target/release/data-avail-linux-amd64
          - uses: actions/upload-artifact@v2
            with:
              name: data-avail-linux-amd64-binary
-             path: entrypoint.sh
+             path: target/release/data-avail-linux-amd64
 
   # compile all binaries from previous jobs into single release
   binary_publish:
@@ -66,12 +70,13 @@ jobs:
            uses: svenstaro/upload-release-action@v2
            with:
              repo_token: ${{ secrets.PAT_TOKEN }}
-             file: /home/runner/work/avail/avail/*
+             file: /home/runner/work/avail/avail/data-avail*
              release_name: ${{ steps.prepare.outputs.tag_name }}
              tag: ${{ steps.prepare.outputs.tag_name }}
              overwrite: true
              file_glob: true
 
+  # build avail image and publish to dockerhub
   docker_linux_amd64:
     runs-on: ubuntu-latest
     steps:
@@ -97,7 +102,7 @@ jobs:
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: .
-          file: ./DockerfileTest
+          file: ./Dockerfile
           platforms: linux/amd64
           push: true
           tags: rebelartists/tests:${{ steps.prepare.outputs.tag_name }}
